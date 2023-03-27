@@ -1,0 +1,25 @@
+[Unit]
+Description=Propagator runner service for SAFERS
+After=network.target
+
+[Service]
+Type=simple
+User=propagator
+Group=propagator
+Restart=always
+RestartSec=5
+TimeoutSec=60
+RuntimeMaxSec=infinity
+PIDFile=/tmp/safers_service.pid
+
+#EnvironmentFile=/usr/local/etc/propagator_runner_staging.conf
+
+WorkingDirectory=/share/propagator_staging/runner_safers/
+
+ExecStart=/bin/bash start-safers-service.sh
+ExecStop=/bin/bash stop-safers-service.sh
+ExecReload=/bin/bash stop-safers-service.sh && /bin/bash start-safers-service.sh
+
+[Install]
+WantedBy=multi-user.target
+
