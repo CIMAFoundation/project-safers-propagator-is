@@ -49,7 +49,7 @@ class PropagatorRunHandler:
     _message_properties: BasicProperties = field(init=False)
 
     def __post_init__(self):
-        output_dir_rel = os.path.join(PropagatorConfig.WORK_DIR, self.run_id + '.' + str(self.datatype_id))
+        output_dir_rel = os.path.join(PropagatorConfig.WORK_DIR, self.run_id)
 
         self.output_dir = os.path.abspath(output_dir_rel)
 

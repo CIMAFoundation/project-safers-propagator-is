@@ -22,7 +22,7 @@ logging.basicConfig(
     ]
 )
 
-SUPPORTED_DATA_TYPES = [35006, ]#35007, 35008, 35009, 35010]
+SUPPORTED_DATA_TYPES = [35006, 35007, 35008, 35009, 35010 ]
 
 def callback(channel, method, properties, body):
     user_id = properties.user_id
@@ -36,7 +36,7 @@ def callback(channel, method, properties, body):
 
     run_id = '.'.join(run_id)
 
-    output_dir_rel = os.path.join(PropagatorConfig.WORK_DIR, run_id + '.' + str(datatype))
+    output_dir_rel = os.path.join(PropagatorConfig.WORK_DIR, run_id)
     os.makedirs(output_dir_rel, exist_ok=True)
     param_file = os.path.join(output_dir_rel, 'message.json')
     

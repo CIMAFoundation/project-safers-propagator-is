@@ -34,10 +34,16 @@ class Wrapper:
     progress_callback: callable
     error_callback: callable
     
+    def __post_init__(self):
+        self.running_file = os.path.join(self.cwd, 'running')
+        self.error_file = os.path.join(self.cwd, 'error')
 
-    def __start(self):
+    def __real_thread(self):
+        # create running file
+        with open(self.running_file, 'w') as f:
+            f.write('')
+
         self.logger.info(f'Executing command: {" ".join(self.program_cmd)}')
-
         try:
             with subprocess.Popen(
                     self.program_cmd,
@@ -68,18 +74,66 @@ class Wrapper:
                     error_code = ErrorCodes(p.returncode).name
                     self.error_callback(f'Error running simulation: {error_code}')
 
-        except Exception:
+        except Exception as exp:
+            self.logger.error('Error running simulation')
+            # create an error file
+            with open(self.error_file, 'w') as f:
+                f.write(str(exp))
+
             raise
 
         finally:
+            os.remove(self.running_file)
+            # remove running file
             self.end_callback()
 
+        
+
+    def __dummy_thread(self):
+        """
+        Thread that will only check if the simulation is running
+        Will terminate when the "running" file is deleted
+        """
+        while self.is_running():
+            sleep(0.5)
+
+        # log the end of the simulation
+        self.logger.info('Simulation finished')
+
+        # check if there is an error file
+        if os.path.exists(self.error_file):
+            
+            self.logger.error('Simulation finished with errors')
+
+            with open(self.error_file, 'r') as f:
+                error = f.read()
+            self.error_callback(error)
+            return
+        
+        # call the callback
+        self.end_callback()
+
+    def is_running(self):
+        """
+        Check if the simulation is running
+        """
+        return os.path.exists(self.running_file)
+
+
     def start(self):
-        t = threading.Thread(target=self.__start)
+        if self.is_running():
+            self.logger.info('Simulation is already running')
+            t = threading.Thread(target=self.__dummy_thread)
+        else:
+            t = threading.Thread(target=self.__real_thread)
+
         t.start()
         logging.info("Main: before running thread")
         t.join()
         logging.info("Main: Thread finished")
+
+
+
 
 
 if __name__ == '__main__':
