@@ -37,6 +37,7 @@ class Wrapper:
     
     def __post_init__(self):
         self.running_file = os.path.join(self.run_dir, 'running')
+        self.completed_file = os.path.join(self.run_dir, 'completed')
         self.error_file = os.path.join(self.run_dir, 'error')
 
     def __real_thread(self):
@@ -84,11 +85,14 @@ class Wrapper:
             raise
 
         finally:
-            os.remove(self.running_file)
+            self.complete()
             # remove running file
             self.end_callback()
 
-        
+    def complete(self):
+        os.remove(self.running_file)
+        with open(self.completed_file, 'w') as f:
+            f.write('')
 
     def __dummy_thread(self):
         """
@@ -114,6 +118,12 @@ class Wrapper:
         # call the callback
         self.end_callback()
 
+    def is_completed(self):
+        """
+        Check if the simulation is completed
+        """
+        return os.path.exists(self.completed_file)
+
     def is_running(self):
         """
         Check if the simulation is running
@@ -122,7 +132,7 @@ class Wrapper:
 
 
     def start(self):
-        if self.is_running():
+        if self.is_running() or self.is_completed():
             self.logger.info('Simulation is already running')
             t = threading.Thread(target=self.__dummy_thread)
         else:
