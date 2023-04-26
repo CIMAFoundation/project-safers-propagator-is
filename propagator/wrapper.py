@@ -29,14 +29,15 @@ class Wrapper:
     process: any = field(init=False)
     program_cmd: list[str]
     cwd: str
+    run_dir: str
     logger = logging
     end_callback: callable
     progress_callback: callable
     error_callback: callable
     
     def __post_init__(self):
-        self.running_file = os.path.join(self.cwd, 'running')
-        self.error_file = os.path.join(self.cwd, 'error')
+        self.running_file = os.path.join(self.run_dir, 'running')
+        self.error_file = os.path.join(self.run_dir, 'error')
 
     def __real_thread(self):
         # create running file

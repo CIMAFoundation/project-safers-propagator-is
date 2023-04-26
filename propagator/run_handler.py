@@ -336,6 +336,7 @@ class PropagatorRunHandler:
                 '-tl', str((self.end_date - self.start_date).seconds//3600)
             ], 
             cwd=PropagatorConfig.PROPAGATOR_DIR,
+            run_dir=self.output_dir,
             end_callback=self.run_end_callback,
             progress_callback=self.run_progress_callback,
             error_callback=self.run_error_callback
