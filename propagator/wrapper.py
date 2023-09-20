@@ -1,21 +1,11 @@
-import json
+import enum
 import logging
 import os
 import subprocess
-from dataclasses import dataclass, field
-from datetime import datetime
-from time import sleep
-import enum
-
-
-from framework.pika_client import PikaClient
 import threading
-from config import PropagatorConfig
-from models.datalake import DatalakeMetadata
-from framework.data_uploader import upload
-import geopandas as gpd
-import shapely
-from os.path import getmtime
+from dataclasses import dataclass, field
+from time import sleep
+
 
 class ErrorCodes(enum.Enum):
     OK = 0

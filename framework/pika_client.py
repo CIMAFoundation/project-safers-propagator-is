@@ -3,8 +3,24 @@ import ssl
 import pika
 
 from config import RabbitMQConfig
-        
+import logging
+
 config = RabbitMQConfig()
+
+class MockPikaClient:
+    def __init__(self, exchange=config.RMQ_EXCHANGE):
+        self.exchange = exchange
+
+    def write_message(self, routing_key, message, properties=None):
+        logging.info(f"Writing message to {self.exchange} with routing key {routing_key}")
+        logging.info(f"Message: {message}")
+        return True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exception_type, exception_value, exception_traceback):
+        pass
 
 class PikaClient:
     def __init__(self, exchange=config.RMQ_EXCHANGE):

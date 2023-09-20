@@ -13,10 +13,8 @@ import shapely
 from pika.spec import BasicProperties
 
 from config import PropagatorConfig
-from framework.data_uploader import (DataUploadException, upload,
-                                     upload_metadata)
-
-from framework.pika_client import PikaClient
+from framework.data_uploader import (DataUploadException, Uploader, MockUploader)
+from framework.pika_client import PikaClient, MockPikaClient
 from models.datalake import DatalakeMetadata
 from propagator.utils import mask_on_cutoff
 from propagator.wrapper import Wrapper
@@ -30,6 +28,8 @@ UpdateType = Union['start','update','end','layer']
 class RunException(Exception):
     pass
 
+
+    
 @dataclass
 class PropagatorRunHandler:
     user_id: str
@@ -45,8 +45,12 @@ class PropagatorRunHandler:
     end_date: datetime = field(init=False)
     probability_range: float = field(init=False)
     
+    messaging_class: Union[PikaClient, MockPikaClient] = field(init=True, default=PikaClient)
+    uploader_class: Union[Uploader, MockUploader] = field(init=True, default=Uploader)
 
     _message_properties: BasicProperties = field(init=False)
+
+    
 
     def __post_init__(self):
         output_dir_rel = os.path.join(PropagatorConfig.WORK_DIR, self.run_id)
@@ -114,7 +118,7 @@ class PropagatorRunHandler:
         }
         logging.info('Sending message', message)
 
-        with PikaClient(exchange='safers.b2b') as client:
+        with self.messaging_class(exchange='safers.b2b') as client:
             client.write_message(
                 routing_key=routing_key,
                 message=json.dumps(message),
@@ -156,7 +160,7 @@ class PropagatorRunHandler:
         @param datatype_resource: the datatype resource
         @return: the url of the uploaded file
         """
-        url = upload(
+        url = self.uploader_class.upload(
             metadata_id, 
             file_path, 
             start_date,
@@ -216,7 +220,7 @@ class PropagatorRunHandler:
                     'request_code': self.run_id
                 }
             )
-            metadata_id = upload_metadata(metadata)
+            metadata_id = self.uploader_class.upload_metadata(metadata)
 
             urls = []
 
