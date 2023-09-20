@@ -22,7 +22,7 @@ logging.basicConfig(
     ]
 )
 
-SUPPORTED_DATA_TYPES = [35006, 35007, 35008, 35009, 35010 ]
+SUPPORTED_DATA_TYPES = [ 35006, 35007, 35008, 35009, 35010, 35011, 35012 ]
 
 def callback(channel, method, properties, body):
     user_id = properties.user_id

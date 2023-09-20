@@ -192,7 +192,7 @@ class PropagatorRunHandler:
         try:
             isochrone_file = self.get_last_file('isochrone', 'geojson')
             # extract isochrone file for value threshold
-            isochrones_gdf, isochrone_file = self.extract_isochrones(isochrone_file)
+            isochrones_gdf, isochrone_file, isochrone_isotime_file = self.extract_isochrones(isochrone_file)
             bbox_geojson = self.get_bbox(isochrones_gdf)
 
         except ValueError:
@@ -225,13 +225,18 @@ class PropagatorRunHandler:
                                         self.end_date, 'GeoJSON', datatype_resource=35007)
                 urls.append(isochrone_res_url)
 
+            if self.datatype_id == DEFAULT_DATATYPE_ID or self.datatype_id == 35012:
+                isochrone_isotime_res_url = self.upload_and_notify(metadata_id, isochrone_isotime_file, self.start_date,
+                                        self.end_date, 'GeoJSON', datatype_resource=35012)
+                urls.append(isochrone_isotime_res_url)
+
             if self.datatype_id == DEFAULT_DATATYPE_ID or self.datatype_id == 35010:
                 ros_mean_file = self.get_last_file('RoS_mean', 'tiff')
                 ros_mean_file = mask_on_cutoff(ros_mean_file, isochrones_gdf, self.probability_range)
                 ros_mean_res_url = self.upload_and_notify(metadata_id, ros_mean_file, self.start_date, self.end_date, 'tiff', datatype_resource=35010)
                 urls.append(ros_mean_res_url)
 
-            if self.datatype_id == DEFAULT_DATATYPE_ID or self.datatype_id == 35010:
+            if self.datatype_id == DEFAULT_DATATYPE_ID or self.datatype_id == 35011:
                 ros_max_file = self.get_last_file('RoS_max', 'tiff')
                 ros_max_file = mask_on_cutoff(ros_max_file, isochrones_gdf, self.probability_range)
                 ros_max_res_url = self.upload_and_notify(metadata_id, ros_max_file, self.start_date, self.end_date, 'tiff', datatype_resource=35011)
@@ -289,7 +294,10 @@ class PropagatorRunHandler:
     def extract_isochrones(self, isochrone_file: str):
         """
         Extracts isochrones with desired value from the isochrone file and saves them to a new file
-        @param isochrone_file: path to the isochrone file
+        @param isochrone_file: path to the source isochrone file
+        @return gdf: the extracted isochrones
+        @return isochrone_file: path to the new isochrone file
+        @return isochrone_isotime_file: path to the new isochrone file with isotime
         """
         gdf = gpd.read_file(isochrone_file)
         # filter out features with property 'value' == self.probabilityRange
@@ -301,10 +309,20 @@ class PropagatorRunHandler:
         if gdf.empty:
             raise ValueError()
         
-        isochrone_file = f'{self.output_dir}/isochrone_{self.probability_range}.geojson'
+        isochrone_file = f'{self.output_dir}/isochrone_prob_{self.probability_range}.geojson'
+        gdf['timeString'] = gdf['time'].apply(
+            lambda x: (self.start_date + timedelta(hours=x)).strftime('%H:%M')
+        )
         gdf.to_file(isochrone_file, driver='GeoJSON')
 
-        return gdf, isochrone_file
+        isochrone_isotime_file = f'{self.output_dir}/isochrone_prob_{self.probability_range}_isotime.geojson'
+        gdf_iso = gdf.copy()
+        gdf_iso['time'] = gdf['time'].apply(
+            lambda x: (self.start_date + timedelta(hours=x)).isoformat())
+        gdf_iso.to_file(isochrone_isotime_file, driver='GeoJSON')
+
+        return gdf, isochrone_file, isochrone_isotime_file
+
 
     def get_bbox(self, gdf: gpd.GeoDataFrame):
         """
