@@ -67,23 +67,28 @@ def main():
         credentials=credentials,
         ssl_options=ssl_options,
         locale="en_US")
+    try:
+        channel = None
+        while True:
+        # create a connection instance and then close it, or use the 'with' scope
+            with pika.BlockingConnection(parameters=params) as conn:
+                # create channel to the broker
+                channel = conn.channel()
 
-    # create a connection instance and then close it, or use the 'with' scope
-    with pika.BlockingConnection(parameters=params) as conn:
-        # create channel to the broker
-        channel = conn.channel()
+                # bind the keys we need to the exchange and predefined queues
+                channel.exchange_declare(config.RMQ_EXCHANGE, exchange_type="topic", passive=True)
+                
+                #channel.queue_bind(queue=config.RMQ_QUEUE, exchange=config.RMQ_EXCHANGE, routing_key=BINDING_KEY)
+                logging.info("Waiting for messages")
 
-        # bind the keys we need to the exchange and predefined queues
-        channel.exchange_declare(config.RMQ_EXCHANGE, exchange_type="topic", passive=True)
-        
-        #channel.queue_bind(queue=config.RMQ_QUEUE, exchange=config.RMQ_EXCHANGE, routing_key=BINDING_KEY)
-        logging.info("Waiting for messages")
-
-        try:
-            # start listening and consuming messages
-            channel.basic_consume(queue=config.RMQ_QUEUE, on_message_callback=callback, auto_ack=True)
-            channel.start_consuming()
-        except KeyboardInterrupt:
+                
+                # start listening and consuming messages
+                channel.basic_consume(queue=config.RMQ_QUEUE, on_message_callback=callback, auto_ack=True)
+                channel.start_consuming()            
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if channel:
             channel.stop_consuming()
 
 
