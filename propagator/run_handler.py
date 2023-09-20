@@ -8,6 +8,8 @@ from os.path import getmtime
 from typing import List, Tuple, Union
 
 import geopandas as gpd
+import pandas as pd
+
 import rasterio as rio
 import shapely
 from pika.spec import BasicProperties
@@ -315,14 +317,14 @@ class PropagatorRunHandler:
         
         isochrone_file = f'{self.output_dir}/isochrone_prob_{self.probability_range}.geojson'
         gdf['timeString'] = gdf['time'].apply(
-            lambda x: (self.start_date + timedelta(hours=x)).strftime('%H:%M')
+            lambda x: (self.start_date + pd.Timedelta(hours=x)).strftime('%H:%M')
         )
         gdf.to_file(isochrone_file, driver='GeoJSON')
 
         isochrone_isotime_file = f'{self.output_dir}/isochrone_prob_{self.probability_range}_isotime.geojson'
         gdf_iso = gdf.copy()
         gdf_iso['time'] = gdf['time'].apply(
-            lambda x: (self.start_date + timedelta(hours=x)).isoformat())
+            lambda x: (self.start_date + pd.Timedelta(hours=x)).isoformat())
         gdf_iso.to_file(isochrone_isotime_file, driver='GeoJSON')
 
         return gdf, isochrone_file, isochrone_isotime_file
