@@ -1,17 +1,15 @@
 
 import json
+import logging
+import os
 import ssl
+from datetime import datetime
+
 import pika
 
-from config import RabbitMQConfig
-from config import PropagatorConfig
+from config import PropagatorConfig, RabbitMQConfig
 from propagator.run_handler import PropagatorRunHandler
-import logging
-from datetime import datetime
-import logging
 from propagator.utils import parse_request_body
-import os
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,6 +19,7 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+logging.getLogger("pika").setLevel(logging.WARNING)
 
 SUPPORTED_DATA_TYPES = [ 35006, 35007, 35008, 35009, 35010, 35011, 35012 ]
 
@@ -29,7 +28,7 @@ def callback(channel, method, properties, body):
     routing_key: str = method.routing_key
 
     logging.info(f"Received message: user_id: {user_id}, routing_key: {routing_key}")
-    logging.info(f"body: {body}")
+    logging.debug(f"body: {body}")
     
     _, datatype, *run_id = routing_key.split('.')
     if int(datatype) not in SUPPORTED_DATA_TYPES: return
@@ -70,7 +69,8 @@ def main():
     try:
         channel = None
         while True:
-        # create a connection instance and then close it, or use the 'with' scope
+            logging.info("Starting connection")
+            # create a connection instance and then close it, or use the 'with' scope
             with pika.BlockingConnection(parameters=params) as conn:
                 # create channel to the broker
                 channel = conn.channel()
@@ -80,7 +80,6 @@ def main():
                 
                 #channel.queue_bind(queue=config.RMQ_QUEUE, exchange=config.RMQ_EXCHANGE, routing_key=BINDING_KEY)
                 logging.info("Waiting for messages")
-
                 
                 # start listening and consuming messages
                 channel.basic_consume(queue=config.RMQ_QUEUE, on_message_callback=callback, auto_ack=True)
@@ -88,6 +87,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        logging.info('Closing channel')
         if channel:
             channel.stop_consuming()
 
