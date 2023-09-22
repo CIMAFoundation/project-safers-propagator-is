@@ -1,33 +1,32 @@
-affine @ file:///Users/ktietz/demo/mc3/conda-bld/affine_1629890479180/work
+affine==2.4.0
 attrs==23.1.0
 autopep8==1.6.0
-certifi @ file:///croot/certifi_1690232220950/work/certifi
+certifi==2023.7.22
 charset-normalizer==2.0.12
 click==8.1.7
-click-plugins @ file:///Users/ktietz/demo/mc3/conda-bld/click-plugins_1630665883852/work
+click-plugins==1.1.1
 cligj==0.7.2
 Fiona==1.9.4.post1
+GDAL
 geojson==3.0.1
 geomet==1.0.0
-geopandas==0.10.2
+geopandas==0.13.2
 idna==3.4
-mkl-fft==1.3.6
-mkl-random @ file:///work/mkl/mkl_random_1682950433854/work
-mkl-service==2.4.0
-numpy @ file:///croot/numpy_and_numpy_base_1691091611330/work
+numpy
+packaging==23.1
 pandas==2.1.0
 pika==1.1.0
 pycodestyle==2.11.0
-pyparsing @ file:///work/ci_py311/pyparsing_1677811559502/work
+pyparsing==3.1.1
 pyproj==3.6.0
 python-dateutil==2.8.2
 python-dotenv==0.10.5
 pytz==2023.3.post1
-rasterio @ file:///work/ci_py311/rasterio_1676861695610/work
+rasterio==1.3.8
 requests==2.26.0
 shapely==2.0.1
 six==1.16.0
-snuggs @ file:///Users/ktietz/demo/mc3/conda-bld/snuggs_1629803886966/work
+snuggs==1.4.7
 toml==0.10.2
 tzdata==2023.3
 urllib3==1.26.16
