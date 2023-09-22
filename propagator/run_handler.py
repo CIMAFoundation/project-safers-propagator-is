@@ -1,7 +1,8 @@
 import json
 import logging
 import os
-import shutil
+import traceback
+            
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from os.path import getmtime
@@ -118,7 +119,7 @@ class PropagatorRunHandler:
             'urls': urls,
             'message': message
         }
-        logging.info('Sending message', message)
+        logging.info(f'Sending message to {routing_key}')
 
         with self.messaging_class(exchange='safers.b2b') as client:
             client.write_message(
@@ -162,6 +163,7 @@ class PropagatorRunHandler:
         @param datatype_resource: the datatype resource
         @return: the url of the uploaded file
         """
+        
         url = self.uploader_class.upload(
             metadata_id, 
             file_path, 
@@ -171,8 +173,10 @@ class PropagatorRunHandler:
             request_code=self.run_id, 
             datatype_resource=datatype_resource
         )
-
+        logging.info(f'Uploaded {file_path} to datalake: {url}')
+        
         data_routing_key = f'status.propagator.{datatype_resource}.{self.run_id}'
+        logging.info(f'Sending message to {data_routing_key}')
         self.send_message(
             message=f'{self.run_id} completed',
             datatype_id=datatype_resource,
@@ -265,6 +269,8 @@ class PropagatorRunHandler:
                 self.send_message(message, urls=urls, status_code=200, type='end')
         
         except Exception as exp:
+            traceback.print_exc()
+            logging.error(exp)
             message = f'{self.run_id} error: {exp}'
             self.send_error_message(message, exp=exp, type='end')
 
@@ -315,13 +321,13 @@ class PropagatorRunHandler:
         if gdf.empty:
             raise ValueError()
         
-        isochrone_file = f'{self.output_dir}/isochrone_prob_{self.probability_range}.geojson'
+        isochrone_file = f'{self.output_dir}/extracted_isochrone_prob_{self.probability_range}.geojson'
         gdf['timeString'] = gdf['time'].apply(
             lambda x: (self.start_date + pd.Timedelta(hours=x)).strftime('%H:%M')
         )
         gdf.to_file(isochrone_file, driver='GeoJSON')
 
-        isochrone_isotime_file = f'{self.output_dir}/isochrone_prob_{self.probability_range}_isotime.geojson'
+        isochrone_isotime_file = f'{self.output_dir}/extracted_isochrone_prob_{self.probability_range}_isotime.geojson'
         gdf_iso = gdf.copy()
         gdf_iso['time'] = gdf['time'].apply(
             lambda x: (self.start_date + pd.Timedelta(hours=x)).isoformat())

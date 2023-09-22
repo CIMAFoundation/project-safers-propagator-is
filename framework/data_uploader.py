@@ -126,7 +126,6 @@ class Uploader:
 
     @staticmethod
     def upload(
-            self,
             metadata_id: str,
             filepath: str, 
             file_date_start:datetime, 

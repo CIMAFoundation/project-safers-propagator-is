@@ -129,9 +129,9 @@ class Wrapper:
             t = threading.Thread(target=self.__real_thread)
 
         t.start()
-        logging.info("Main: before running thread")
+        logging.debug("Main: before running thread")
         t.join()
-        logging.info("Main: Thread finished")
+        logging.debug("Main: Thread finished")
 
 
 

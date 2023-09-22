@@ -1,16 +1,15 @@
 import json
-
+import os
 from datetime import datetime
 
-import rasterio as rio
+import geopandas as gpd
 import numpy as np
+import rasterio as rio
+from geojson import FeatureCollection
+from geomet import wkt
 from rasterio import features
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.ops import unary_union
-import geopandas as gpd
-
-from geojson import FeatureCollection
-from geomet import wkt
 
 
 def parse_request_body(body):
@@ -217,9 +216,13 @@ def mask_on_cutoff(values_file: str, gdf: gpd.GeoDataFrame, cutoff_value: float)
     # mask values
     values = values * rasterized
 
-    
+    # get filename from value_file
+    basename = os.path.basename(values_file)
+    # get directory from value_file
+    dirname = os.path.dirname(values_file)
+
     # extract filename
-    cutoff_file = values_file.replace('.tiff', '_cutoff.tiff')
+    cutoff_file = os.path.join(dirname, f"cutoff_{basename}")
 
     # write to file 
     with rio.open(cutoff_file, 'w', **profile) as dst:
