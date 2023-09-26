@@ -20,7 +20,7 @@ class Wrapper:
     program_cmd: list[str]
     cwd: str
     run_dir: str
-    logger = logging
+
     end_callback: callable
     progress_callback: callable
     error_callback: callable
@@ -35,7 +35,7 @@ class Wrapper:
         with open(self.running_file, 'w') as f:
             f.write('')
 
-        self.logger.info(f'Executing command: {" ".join(self.program_cmd)}')
+        logging.info(f'Executing command: {" ".join(self.program_cmd)}')
         try:
             with subprocess.Popen(
                     self.program_cmd,
@@ -54,20 +54,20 @@ class Wrapper:
                 while p.poll() is None:
                     line = p.stdout.readline()
                     if line:
-                        self.logger.info(line)
+                        logging.info(line)
                         accum_stdout.append(line)
                         self.progress_callback(line)
 
                 if p.returncode > 0:
                     stderr = p.stderr.read()
-                    self.logger.warning(
+                    logging.warning(
                         'Error in simulation:\n{}'.format(stderr))
                     accum_stderr.append(stderr)
                     error_code = ErrorCodes(p.returncode).name
                     self.error_callback(f'Error running simulation: {error_code}')
 
         except Exception as exp:
-            self.logger.error('Error running simulation')
+            logging.error('Error running simulation')
             # create an error file
             with open(self.error_file, 'w') as f:
                 f.write(str(exp))
@@ -75,8 +75,9 @@ class Wrapper:
             raise
 
         finally:
-            self.complete()
             # remove running file
+            self.complete()
+            # signal the end of the simulation
             self.end_callback()
 
     def complete(self):
@@ -93,12 +94,12 @@ class Wrapper:
             sleep(0.5)
 
         # log the end of the simulation
-        self.logger.info('Simulation finished')
+        logging.info('Simulation finished')
 
         # check if there is an error file
         if os.path.exists(self.error_file):
             
-            self.logger.error('Simulation finished with errors')
+            logging.error('Simulation finished with errors')
 
             with open(self.error_file, 'r') as f:
                 error = f.read()
@@ -123,7 +124,7 @@ class Wrapper:
 
     def start(self):
         if self.is_running() or self.is_completed():
-            self.logger.info('Simulation is already running')
+            logging.info('Simulation is already running')
             t = threading.Thread(target=self.__dummy_thread)
         else:
             t = threading.Thread(target=self.__real_thread)
@@ -142,7 +143,6 @@ if __name__ == '__main__':
     wrapper = Wrapper(
         program_cmd=['python3', 'test.py'],
         cwd='/home/propagator/propagator',
-        logger=logging,
         end_callback=lambda: print('callback'),
         error_callback=lambda: print('error_callback')
     )

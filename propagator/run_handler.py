@@ -311,16 +311,17 @@ class PropagatorRunHandler:
         @return isochrone_file: path to the new isochrone file
         @return isochrone_isotime_file: path to the new isochrone file with isotime
         """
-        gdf = gpd.read_file(isochrone_file)
+        _gdf = gpd.read_file(isochrone_file)
         # filter out features with property 'value' == self.probabilityRange
         try:
-            gdf = gdf.query(f'value == {self.probability_range}')
+            _gdf = _gdf.query(f'value == {self.probability_range}')
         except:
             raise ValueError()
         
-        if gdf.empty:
+        if _gdf.empty:
             raise ValueError()
         
+        gdf = _gdf.copy()
         isochrone_file = f'{self.output_dir}/extracted_isochrone_prob_{self.probability_range}.geojson'
         gdf['timeString'] = gdf['time'].apply(
             lambda x: (self.start_date + pd.Timedelta(hours=x)).strftime('%H:%M')
@@ -328,9 +329,11 @@ class PropagatorRunHandler:
         gdf.to_file(isochrone_file, driver='GeoJSON')
 
         isochrone_isotime_file = f'{self.output_dir}/extracted_isochrone_prob_{self.probability_range}_isotime.geojson'
-        gdf_iso = gdf.copy()
-        gdf_iso['time'] = gdf['time'].apply(
+        gdf_iso = _gdf.copy()
+        gdf_iso['timestamp'] = gdf['time'].apply(
             lambda x: (self.start_date + pd.Timedelta(hours=x)).isoformat())
+
+        gdf.to_file(isochrone_file, driver='GeoJSON')        
         gdf_iso.to_file(isochrone_isotime_file, driver='GeoJSON')
 
         return gdf, isochrone_file, isochrone_isotime_file
