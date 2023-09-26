@@ -31,7 +31,8 @@ def callback(channel, method, properties, body):
     logging.debug(f"body: {body}")
     
     _, datatype, *run_id = routing_key.split('.')
-    if int(datatype) not in SUPPORTED_DATA_TYPES: return
+    datatype = int(datatype)
+    if datatype not in SUPPORTED_DATA_TYPES: return
 
     run_id = '.'.join(run_id)
 
@@ -46,7 +47,7 @@ def callback(channel, method, properties, body):
     logging.info(f"run_id: {run_id}")
     
     data = parse_request_body(body)
-    runner = PropagatorRunHandler(user_id, run_id, data, datatype_id=35006)
+    runner = PropagatorRunHandler(user_id, run_id, data, datatype_id=datatype)
     runner.run_propagator()
 
 

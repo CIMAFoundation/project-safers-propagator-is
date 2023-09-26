@@ -39,7 +39,7 @@ class PropagatorRunHandler:
     run_id: str
     params: dict
     
-    datatype_id: field(default=DEFAULT_DATATYPE_ID, init=True)
+    datatype_id: int = field(default=DEFAULT_DATATYPE_ID, init=True)
 
     output_dir: str = field(init=False)
     title: str = field(init=False)
@@ -205,7 +205,9 @@ class PropagatorRunHandler:
             isochrones_gdf, isochrone_file, isochrone_isotime_file = self.extract_isochrones(isochrone_file)
             bbox_geojson = self.get_bbox(isochrones_gdf)
 
-        except ValueError:
+        except ValueError as ve:
+            traceback.print_exc()
+            logging.error('error processing output', ve)
             message = 'LOW_PROBABILITY'
             self.send_error_message(message, type='end', status_code=500)
             return
@@ -215,6 +217,7 @@ class PropagatorRunHandler:
             metadata = DatalakeMetadata(
                 title=self.title, 
                 notes=self.notes,
+                datatype_id=self.datatype_id,
                 data_temporal_extent_begin_date=self.start_date,
                 data_temporal_extent_end_date=self.end_date,
                 temporalReference_dateOfPublication=datetime.now(),
