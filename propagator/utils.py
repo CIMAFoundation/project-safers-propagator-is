@@ -46,6 +46,9 @@ def parse_request_body(body):
 
     # transform actions to suitable propagator format
     for bc in data['boundary_conditions']:
+        # we are expecting minutes instead of hours
+        bc['time'] = bc['time'] * 60
+        
         if 'fireBreak' not in bc:
             continue
 
