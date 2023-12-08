@@ -303,6 +303,15 @@ class PropagatorRunHandler:
                 )
                 urls.append(probability_cube_url)
 
+            if self.datatype_id == DEFAULT_DATATYPE_ID or self.datatype_id == 35014:
+                rasters = self.get_probability_rasters()
+                probability_file = rasters[-1].path
+                probability_file = mask_on_cutoff(
+                    probability_file, isochrones_gdf, self.probability_range)
+                probability_res_url = self.upload_and_notify(
+                    metadata_id, probability_file, self.start_date, self.end_date, 'tiff', datatype_resource=35014)
+                urls.append(probability_res_url)
+
             if self.datatype_id == DEFAULT_DATATYPE_ID:
                 message = f'{self.run_id} completed'
                 self.send_message(message, urls=urls,

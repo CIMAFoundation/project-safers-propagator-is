@@ -23,7 +23,8 @@ logging.basicConfig(
     ]
 )
 
-SUPPORTED_DATA_TYPES = [35006, 35007, 35008, 35009, 35010, 35011, 35012, 35013]
+SUPPORTED_DATA_TYPES = [35006, 35007, 35008,
+                        35009, 35010, 35011, 35012, 35013, 35014]
 
 run_id = 'links.mr00000324'  # sys.argv[1]
 user_id = run_id.split('.')[0]
@@ -46,7 +47,7 @@ if os.path.exists(os.path.join(output_dir_rel, 'completed')):
 
 data = parse_request_body(body)
 
-runner = PropagatorRunHandler(run_id, routing_key, data, datatype_id=35013,
+runner = PropagatorRunHandler(run_id, routing_key, data, datatype_id=35014,
                               uploader_class=MockUploader, messaging_class=MockPikaClient)
 
 # runner = PropagatorRunHandler(run_id, routing_key, data, datatype_id=35006,
