@@ -1,6 +1,8 @@
 import json
 import os
+from dataclasses import dataclass
 from datetime import datetime
+from typing import List
 
 import geopandas as gpd
 import numpy as np
@@ -8,8 +10,8 @@ import rasterio as rio
 from geojson import FeatureCollection
 from geomet import wkt
 from rasterio import features
+from rasterio.warp import Resampling, calculate_default_transform, reproject
 from shapely.geometry import MultiPolygon, Polygon
-from shapely.ops import unary_union
 
 
 def parse_request_body(body):
@@ -48,7 +50,7 @@ def parse_request_body(body):
     for bc in data['boundary_conditions']:
         # we are expecting minutes instead of hours
         bc['time'] = bc['time'] * 60
-        
+
         if 'fireBreak' not in bc:
             continue
 
@@ -182,7 +184,6 @@ def transform_features_to_propagator_strings(features: FeatureCollection):
     return propagator_strings
 
 
-
 def mask_on_cutoff(values_file: str, gdf: gpd.GeoDataFrame, cutoff_value: float) -> str:
     """Masks a raster on the isochrones of a given value.
     @param values_file: path to the raster file
@@ -196,7 +197,6 @@ def mask_on_cutoff(values_file: str, gdf: gpd.GeoDataFrame, cutoff_value: float)
         values = values.astype(float)
         transform = values_src.transform
         profile = values_src.profile
-
 
     # read geometry
     geometry = gdf.geometry\
@@ -227,8 +227,130 @@ def mask_on_cutoff(values_file: str, gdf: gpd.GeoDataFrame, cutoff_value: float)
     # extract filename
     cutoff_file = os.path.join(dirname, f"cutoff_{basename}")
 
-    # write to file 
+    # write to file
     with rio.open(cutoff_file, 'w', **profile) as dst:
         dst.write(values, 1)
-    
+
     return cutoff_file
+
+
+@dataclass
+class Raster:
+    path: str
+    time: int
+
+    @staticmethod
+    def from_path(path: str):
+        basename = os.path.basename(path)
+        time = int(basename.rsplit('.')[0])
+        return Raster(path, time)
+
+    def __lt__(self, other):
+        return self.time < other.time
+
+
+def mask_on_geometry(
+    values,
+    transform,
+    gdf: gpd.GeoDataFrame,
+    time: int,
+) -> str:
+    geometry = gdf\
+        .query(f'time == {time}')\
+        .geometry\
+        .apply(lambda g: MultiPolygon([Polygon(g) for g in g.geoms]))\
+        .unary_union
+
+    rasterized = features.rasterize(
+        [geometry],
+        out_shape=values.shape,
+        fill=0,
+        out=None,
+        transform=transform,
+        all_touched=True,
+        default_value=1,
+        dtype=np.int32
+    )
+
+    # mask values
+    values = values * rasterized
+
+    return values
+
+
+def reproject_raster(
+        raster: Raster,
+        gdf: gpd.GeoDataFrame,
+        dst_crs: str,
+        dst_width: int,
+        dst_height: int,
+        dst_bounds: tuple,
+        dtype: np.dtype) -> np.ndarray:
+    with rio.open(raster.path) as src:
+        src_crs = src.crs
+        src_transform = src.transform
+        src_values = src.read(1)
+
+    src_values = mask_on_geometry(
+        src_values,
+        src_transform,
+        gdf,
+        raster.time)
+
+    transform, _, _ = calculate_default_transform(
+        src_crs, dst_crs, dst_width, dst_height, *dst_bounds
+    )
+
+    resized_array = np.zeros(
+        (dst_height, dst_width), dtype=dtype)
+
+    reproject(
+        source=src_values,
+        destination=resized_array,
+        src_transform=src_transform,
+        src_crs=src_crs,
+        dst_transform=transform,
+        dst_crs=dst_crs,
+        resampling=Resampling.nearest)
+
+    return resized_array
+
+
+def get_cube(rasters: List[Raster], gdf: gpd.GeoDataFrame) -> np.ndarray:
+    path_last_raster = rasters[-1].path
+
+    with rio.open(path_last_raster) as src:
+        dst_crs = src.crs
+        dst_transform = src.transform
+        dst_height = src.height
+        dst_width = src.width
+        dst_bounds = src.bounds
+
+        target_array = np.zeros(
+            (dst_height, dst_width, len(rasters)), dtype=np.float32
+        )
+
+        values = src.read(1)
+
+        # mask values
+        values = mask_on_geometry(
+            values,
+            dst_transform,
+            gdf,
+            rasters[-1].time,
+        )
+
+        target_array[:, :, -1] = values
+
+    for t, raster in enumerate(rasters[:-1]):
+        resized_array = reproject_raster(
+            raster, gdf, dst_crs, dst_width, dst_height, dst_bounds, np.float32
+        )
+        target_array[:, :, t] = resized_array
+
+    # calculate lats and lons
+    lons = np.arange(dst_width) * dst_transform.a + dst_transform.c
+    lats = np.arange(dst_height) * dst_transform.e + dst_transform.f
+    times = [r.time for r in rasters]
+
+    return target_array, lons, lats, times

@@ -2,43 +2,42 @@ import json
 import logging
 import os
 import traceback
-            
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from os.path import getmtime
-from typing import List, Tuple, Union
+from typing import List, Union
 
 import geopandas as gpd
 import pandas as pd
-
 import rasterio as rio
 import shapely
+import xarray as xr
 from pika.spec import BasicProperties
 
 from config import PropagatorConfig
-from framework.data_uploader import (DataUploadException, Uploader, MockUploader)
-from framework.pika_client import PikaClient, MockPikaClient
+from framework.data_uploader import MockUploader, Uploader
+from framework.pika_client import MockPikaClient, PikaClient
 from models.datalake import DatalakeMetadata
-from propagator.utils import mask_on_cutoff
+from propagator.utils import Raster, get_cube, mask_on_cutoff
 from propagator.wrapper import Wrapper
 
 DEFAULT_RUN_LENGHT = 72
 
 DEFAULT_DATATYPE_ID = 35006
 
-UpdateType = Union['start','update','end','layer']
+UpdateType = Union['start', 'update', 'end', 'layer']
+
 
 class RunException(Exception):
     pass
 
 
-    
 @dataclass
 class PropagatorRunHandler:
     user_id: str
     run_id: str
     params: dict
-    
+
     datatype_id: int = field(default=DEFAULT_DATATYPE_ID, init=True)
 
     output_dir: str = field(init=False)
@@ -47,13 +46,13 @@ class PropagatorRunHandler:
     start_date: datetime = field(init=False)
     end_date: datetime = field(init=False)
     probability_range: float = field(init=False)
-    
-    messaging_class: Union[PikaClient, MockPikaClient] = field(init=True, default=PikaClient)
-    uploader_class: Union[Uploader, MockUploader] = field(init=True, default=Uploader)
+
+    messaging_class: Union[PikaClient, MockPikaClient] = field(
+        init=True, default=PikaClient)
+    uploader_class: Union[Uploader, MockUploader] = field(
+        init=True, default=Uploader)
 
     _message_properties: BasicProperties = field(init=False)
-
-    
 
     def __post_init__(self):
         output_dir_rel = os.path.join(PropagatorConfig.WORK_DIR, self.run_id)
@@ -62,16 +61,16 @@ class PropagatorRunHandler:
 
         print('output_dir', self.output_dir)
 
-        
         self.start_date = datetime.now()
         start_date_str = self.params.get('init_date', None)
 
-
         if start_date_str is not None:
             self.start_date = datetime.strptime(start_date_str, '%Y%m%d%H%M')
-        
-        self.title = self.params.get('name', f'Propagator Run {self.start_date}')
-        self.notes = self.params.get('description', f'Propagator Run {self.start_date}')
+
+        self.title = self.params.get(
+            'name', f'Propagator Run {self.start_date}')
+        self.notes = self.params.get(
+            'description', f'Propagator Run {self.start_date}')
 
         duration = self.params.get('time_limit', DEFAULT_RUN_LENGHT*60)
         self.end_date = self.start_date + timedelta(minutes=duration)
@@ -81,22 +80,22 @@ class PropagatorRunHandler:
         self.run_routing_key = f'status.propagator.{self.datatype_id}.{self.run_id}'
 
         self._message_properties = BasicProperties(
-            content_type='application/json', 
-            content_encoding='utf-8', 
-            user_id='cima', 
-            app_id='propagator', 
+            content_type='application/json',
+            content_encoding='utf-8',
+            user_id='cima',
+            app_id='propagator',
             delivery_mode=2,
             message_id=self.run_id
         )
 
-    def send_message(self, 
-        message: str, 
-        status_code: int=200,
-        datatype_id: int=None, 
-        type: UpdateType='update', 
-        urls:List[str]=[],
-        routing_key=None
-        ):
+    def send_message(self,
+                     message: str,
+                     status_code: int = 200,
+                     datatype_id: int = None,
+                     type: UpdateType = 'update',
+                     urls: List[str] = [],
+                     routing_key=None
+                     ):
         """
         Sends a message to the bus
         @param message: the message to send
@@ -126,13 +125,13 @@ class PropagatorRunHandler:
                 routing_key=routing_key,
                 message=json.dumps(message),
                 properties=self._message_properties
-            )            
+            )
 
-    def send_error_message(self, 
-        message: str, 
-        exp:Exception=None, 
-        status_code: int=500,
-        type: UpdateType = 'end'):
+    def send_error_message(self,
+                           message: str,
+                           exp: Exception = None,
+                           status_code: int = 500,
+                           type: UpdateType = 'end'):
         """
         Sends an error message to the bus
         @param message: the message to send
@@ -145,14 +144,14 @@ class PropagatorRunHandler:
         self.send_message(message, status_code=status_code, type=type)
 
     def upload_and_notify(
-            self, 
-            metadata_id: str, 
-            file_path: str, 
-            start_date: datetime, 
-            end_date: datetime, 
-            format: str,
-            datatype_resource: int
-        ) -> str:
+        self,
+        metadata_id: str,
+        file_path: str,
+        start_date: datetime,
+        end_date: datetime,
+        format: str,
+        datatype_resource: int
+    ) -> str:
         """
         Uploads a file to the datalake and notifies the bus about it
         @param metadata_id: the metadata id of the file
@@ -163,18 +162,18 @@ class PropagatorRunHandler:
         @param datatype_resource: the datatype resource
         @return: the url of the uploaded file
         """
-        
+
         url = self.uploader_class.upload(
-            metadata_id, 
-            file_path, 
+            metadata_id,
+            file_path,
             start_date,
-            end_date, 
-            format, 
-            request_code=self.run_id, 
+            end_date,
+            format,
+            request_code=self.run_id,
             datatype_resource=datatype_resource
         )
         logging.info(f'Uploaded {file_path} to datalake: {url}')
-        
+
         data_routing_key = f'status.propagator.{datatype_resource}.{self.run_id}'
         logging.info(f'Sending message to {data_routing_key}')
         self.send_message(
@@ -192,17 +191,18 @@ class PropagatorRunHandler:
         Callback to be called when the progress of the run changes
         @param progress: the progress of the run
         """
-        #self.send_message(progress_message, type='update')
+        # self.send_message(progress_message, type='update')
         pass
 
     def run_end_callback(self):
         """
         Callback to be called when the run is finished
-        """            
+        """
         try:
             isochrone_file = self.get_last_file('isochrone', 'geojson')
             # extract isochrone file for value threshold
-            isochrones_gdf, isochrone_file, isochrone_isotime_file = self.extract_isochrones(isochrone_file)
+            isochrones_gdf, isochrone_file, isochrone_isotime_file = self.extract_isochrones(
+                isochrone_file)
             bbox_geojson = self.get_bbox(isochrones_gdf)
 
         except ValueError as ve:
@@ -211,11 +211,11 @@ class PropagatorRunHandler:
             message = 'LOW_PROBABILITY'
             self.send_error_message(message, type='end', status_code=500)
             return
-        
+
         try:
 
             metadata = DatalakeMetadata(
-                title=self.title, 
+                title=self.title,
                 notes=self.notes,
                 datatype_id=self.datatype_id,
                 data_temporal_extent_begin_date=self.start_date,
@@ -235,42 +235,79 @@ class PropagatorRunHandler:
 
             if self.datatype_id == DEFAULT_DATATYPE_ID or self.datatype_id == 35007:
                 isochrone_res_url = self.upload_and_notify(metadata_id, isochrone_file, self.start_date,
-                                        self.end_date, 'GeoJSON', datatype_resource=35007)
+                                                           self.end_date, 'GeoJSON', datatype_resource=35007)
                 urls.append(isochrone_res_url)
 
             if self.datatype_id == DEFAULT_DATATYPE_ID or self.datatype_id == 35012:
                 isochrone_isotime_res_url = self.upload_and_notify(metadata_id, isochrone_isotime_file, self.start_date,
-                                        self.end_date, 'GeoJSON', datatype_resource=35012)
+                                                                   self.end_date, 'GeoJSON', datatype_resource=35012)
                 urls.append(isochrone_isotime_res_url)
 
             if self.datatype_id == DEFAULT_DATATYPE_ID or self.datatype_id == 35010:
                 ros_mean_file = self.get_last_file('RoS_mean', 'tiff')
-                ros_mean_file = mask_on_cutoff(ros_mean_file, isochrones_gdf, self.probability_range)
-                ros_mean_res_url = self.upload_and_notify(metadata_id, ros_mean_file, self.start_date, self.end_date, 'tiff', datatype_resource=35010)
+                ros_mean_file = mask_on_cutoff(
+                    ros_mean_file, isochrones_gdf, self.probability_range)
+                ros_mean_res_url = self.upload_and_notify(
+                    metadata_id, ros_mean_file, self.start_date, self.end_date, 'tiff', datatype_resource=35010)
                 urls.append(ros_mean_res_url)
 
             if self.datatype_id == DEFAULT_DATATYPE_ID or self.datatype_id == 35011:
                 ros_max_file = self.get_last_file('RoS_max', 'tiff')
-                ros_max_file = mask_on_cutoff(ros_max_file, isochrones_gdf, self.probability_range)
-                ros_max_res_url = self.upload_and_notify(metadata_id, ros_max_file, self.start_date, self.end_date, 'tiff', datatype_resource=35011)
+                ros_max_file = mask_on_cutoff(
+                    ros_max_file, isochrones_gdf, self.probability_range)
+                ros_max_res_url = self.upload_and_notify(
+                    metadata_id, ros_max_file, self.start_date, self.end_date, 'tiff', datatype_resource=35011)
                 urls.append(ros_max_res_url)
 
             if self.datatype_id == DEFAULT_DATATYPE_ID or self.datatype_id == 35008:
-                fireline_intensity_max_file = self.get_last_file('fireline_intensity_max', 'tiff')
-                fireline_intensity_max_file = mask_on_cutoff(fireline_intensity_max_file, isochrones_gdf, self.probability_range)
-                intensity_mean_res_url = self.upload_and_notify(metadata_id, fireline_intensity_max_file, self.start_date, self.end_date, 'tiff', datatype_resource=35008)
+                fireline_intensity_max_file = self.get_last_file(
+                    'fireline_intensity_max', 'tiff')
+                fireline_intensity_max_file = mask_on_cutoff(
+                    fireline_intensity_max_file, isochrones_gdf, self.probability_range)
+                intensity_mean_res_url = self.upload_and_notify(
+                    metadata_id, fireline_intensity_max_file, self.start_date, self.end_date, 'tiff', datatype_resource=35008)
                 urls.append(intensity_mean_res_url)
 
             if self.datatype_id == DEFAULT_DATATYPE_ID or self.datatype_id == 35009:
-                fireline_intensity_mean_file = self.get_last_file('fireline_intensity_mean', 'tiff')
-                fireline_intensity_mean_file = mask_on_cutoff(fireline_intensity_mean_file, isochrones_gdf, self.probability_range)
-                intensity_max_res_url = self.upload_and_notify(metadata_id, fireline_intensity_mean_file, self.start_date, self.end_date, 'tiff', datatype_resource=35009)
+                fireline_intensity_mean_file = self.get_last_file(
+                    'fireline_intensity_mean', 'tiff')
+                fireline_intensity_mean_file = mask_on_cutoff(
+                    fireline_intensity_mean_file, isochrones_gdf, self.probability_range)
+                intensity_max_res_url = self.upload_and_notify(
+                    metadata_id, fireline_intensity_mean_file, self.start_date, self.end_date, 'tiff', datatype_resource=35009)
                 urls.append(intensity_max_res_url)
 
-            if self.datatype_id == DEFAULT_DATATYPE_ID:                
+            if self.datatype_id == DEFAULT_DATATYPE_ID or self.datatype_id == 35013:
+                rasters = self.get_probability_rasters()
+                values, lons, lats, times = get_cube(rasters, isochrones_gdf)
+
+                ds = xr.Dataset({
+                    'probability': xr.DataArray(
+                        values,
+                        coords={
+                            'lat': lats.tolist(),
+                            'lon': lons.tolist(),
+                            'time': [self.start_date + timedelta(minutes=t) for t in times]
+                        },
+                        attrs={
+                            'crs': 'EPSG:4326'
+                        },
+                    )})
+                probability_cube_file = f'{self.output_dir}/probability.nc'
+                ds.to_netcdf(probability_cube_file)
+                probability_cube_url = self.upload_and_notify(
+                    metadata_id, probability_cube_file,
+                    self.start_date,
+                    self.end_date, 'nc',
+                    datatype_resource=35013
+                )
+                urls.append(probability_cube_url)
+
+            if self.datatype_id == DEFAULT_DATATYPE_ID:
                 message = f'{self.run_id} completed'
-                self.send_message(message, urls=urls, status_code=200, type='end')
-        
+                self.send_message(message, urls=urls,
+                                  status_code=200, type='end')
+
         except Exception as exp:
             traceback.print_exc()
             logging.error(exp)
@@ -284,6 +321,26 @@ class PropagatorRunHandler:
         """
         self.send_error_message(f'{self.run_id} error: {error}', type='end')
 
+    def get_probability_rasters(self):
+        output_files = os.listdir(self.output_dir)
+
+        # filter file names that have this structure 'xxx.tiff' where xxx are digits
+        def is_probability_raster(f):
+            if not f.endswith('.tiff'):
+                return None
+            s = f.rsplit('.')[0]
+            try:
+                return int(s)
+            except ValueError:
+                return None
+
+        files = [
+            f'{self.output_dir}/{f}' for f in output_files if is_probability_raster(f)
+        ]
+        rasters = [Raster.from_path(f) for f in files]
+        rasters = list(sorted(rasters))
+
+        return rasters
 
     def get_last_file(self, output_prefix: str, output_type: str):
         """
@@ -292,12 +349,12 @@ class PropagatorRunHandler:
         @param output_type: type of the file
         """
         output_files = os.listdir(self.output_dir)
-        
+
         files = list(
             map(lambda f: f'{self.output_dir}/{f}',
-                filter(lambda f: f.startswith(output_prefix) and f.endswith(output_type), 
-                output_files
-        )))
+                filter(lambda f: f.startswith(output_prefix) and f.endswith(output_type),
+                       output_files
+                       )))
 
         files.sort(key=lambda f: getmtime(f))
         if len(files) == 0:
@@ -320,14 +377,15 @@ class PropagatorRunHandler:
             _gdf = _gdf.query(f'value == {self.probability_range}')
         except:
             raise ValueError()
-        
+
         if _gdf.empty:
             raise ValueError()
-        
+
         gdf = _gdf.copy()
         isochrone_file = f'{self.output_dir}/extracted_isochrone_prob_{self.probability_range}.geojson'
         gdf['timeString'] = gdf['time'].apply(
-            lambda x: (self.start_date + pd.Timedelta(hours=x)).strftime('%H:%M')
+            lambda x: (self.start_date + pd.Timedelta(hours=x)
+                       ).strftime('%H:%M')
         )
         gdf.to_file(isochrone_file, driver='GeoJSON')
 
@@ -336,20 +394,19 @@ class PropagatorRunHandler:
         gdf_iso['timestamp'] = gdf['time'].apply(
             lambda x: (self.start_date + pd.Timedelta(hours=x)).isoformat())
 
-        gdf.to_file(isochrone_file, driver='GeoJSON')        
+        gdf.to_file(isochrone_file, driver='GeoJSON')
         gdf_iso.to_file(isochrone_isotime_file, driver='GeoJSON')
 
         return gdf, isochrone_file, isochrone_isotime_file
-
 
     def get_bbox(self, gdf: gpd.GeoDataFrame):
         """
         Returns bounding box of the isochrones
         """
         # save filtered features to new file
-        lonmin, latmin, lonmax, latmax = gdf.total_bounds            
+        lonmin, latmin, lonmax, latmax = gdf.total_bounds
         shapely_polygon = shapely.geometry.box(lonmin, latmin, lonmax, latmax)
-        bbox_geojson = shapely.geometry.mapping(shapely_polygon)            
+        bbox_geojson = shapely.geometry.mapping(shapely_polygon)
 
         return bbox_geojson
 
@@ -360,7 +417,8 @@ class PropagatorRunHandler:
         with open(param_file, 'w') as fp:
             json.dump(self.params, fp)
 
-        propagator_main = os.path.join(PropagatorConfig.PROPAGATOR_DIR, 'main.py')
+        propagator_main = os.path.join(
+            PropagatorConfig.PROPAGATOR_DIR, 'main.py')
 
         wrapper = Wrapper(
             program_cmd=[
@@ -370,7 +428,7 @@ class PropagatorRunHandler:
                 '-f', param_file,
                 '-of', self.output_dir,
                 '-tl', str((self.end_date - self.start_date).seconds//3600)
-            ], 
+            ],
             cwd=PropagatorConfig.PROPAGATOR_DIR,
             run_dir=self.output_dir,
             end_callback=self.run_end_callback,
