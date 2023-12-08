@@ -21,7 +21,7 @@ logging.basicConfig(
 )
 logging.getLogger("pika").setLevel(logging.WARNING)
 
-SUPPORTED_DATA_TYPES = [35006, 35007, 35008, 35009, 35010, 35011, 35012, 35013]
+SUPPORTED_DATA_TYPES = [35006, 35007, 35008, 35009, 35010, 35011, 35012, 35013, 35014]
 
 
 def callback(channel, method, properties, body):
